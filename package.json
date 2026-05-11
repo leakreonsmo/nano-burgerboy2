@@ -1,0 +1,19 @@
+{
+  "name": "huge-express-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "compression": "latest",
+    "body-parser": "latest",
+    "cors": "latest",
+    "axios": "latest",
+    "form-data": "latest",
+    "ejs": "latest",
+    "dotenv": "latest"
+  }
+}
