@@ -11,6 +11,7 @@
     "compression": "latest",
     "body-parser": "latest",
     "cors": "latest",
+    "ejs": "latest",
     "axios": "latest",
     "form-data": "latest",
     "ejs": "latest",

